@@ -1104,6 +1104,7 @@
       purchases: [],
       cart: Storage.get(CONFIG.STORAGE_KEY) || [],
       currentProduct: null,
+      currentExternalProduct: null, // Adicionado para armazenar produto da API externa
       isEditingProduct: false
     };
 
@@ -1359,6 +1360,11 @@
         const imageUrl = product.image_url || '';
         const price = parseFloat(product.price) || 0;
 
+        // Salvar o produto externo no estado para usar no modal
+        if (!isFromDatabase) {
+          State.currentExternalProduct = product;
+        }
+
         resultDiv.innerHTML = `
           <div class="product-card">
             <div class="product-image-container">
@@ -1384,7 +1390,7 @@
                   <button class="btn-edit" onclick="Modal.openProductModal('${product.ean}', true)">✏️ Editar</button>
                   <button class="btn-danger" onclick="ProductManager.deleteProduct('${product.ean}', '${product.name.replace(/'/g, "\\'")}')">🗑️ Excluir</button>
                 ` : `
-                  <button class="btn btn-success" style="width: auto; padding: 0.75rem 1rem; font-size: 0.875rem;" onclick="Modal.openProductModal('${product.ean}', false)">
+                  <button class="btn btn-success" style="width: auto; padding: 0.75rem 1rem; font-size: 0.875rem;" onclick="Modal.openProductModal('${product.ean}', false, true)">
                     💾 Salvar no Banco
                   </button>
                 `}
@@ -1678,13 +1684,24 @@
         return null;
       },
 
-      openProductModal(ean, isEditing = false) {
+      openProductModal(ean, isEditing = false, isExternal = false) {
         State.isEditingProduct = isEditing;
         const modal = document.getElementById('product-modal');
         const title = document.getElementById('product-modal-title');
         const body = document.getElementById('product-modal-body');
 
-        const product = State.products.find(p => String(p.ean) === String(ean)) || { ean };
+        // Buscar produto do banco ou usar o produto externo
+        let product = State.products.find(p => String(p.ean) === String(ean));
+        
+        // Se for produto externo e não encontrado no banco, usar o produto salvo no estado
+        if (!product && isExternal && State.currentExternalProduct) {
+          product = State.currentExternalProduct;
+        }
+        
+        // Se ainda não encontrou, criar objeto básico
+        if (!product) {
+          product = { ean };
+        }
 
         title.textContent = isEditing ? '✏️ Editar Produto' : '➕ Cadastrar Produto';
 
@@ -1707,7 +1724,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">💵 Preço (R$)</label>
-            <input type="number" id="modal-price-product" class="input" value="${product.price || ''}" step="0.01" min="0" placeholder="0.00">
+            <input type="number" id="modal-price-product" class="input" value="${product.price || '0.00'}" step="0.01" min="0" placeholder="0.00">
           </div>
           <div class="form-group">
             <label class="form-label">🖼️ URL da Imagem</label>
@@ -1756,6 +1773,10 @@
 
           alert(`✅ Produto ${State.isEditingProduct ? 'atualizado' : 'cadastrado'} com sucesso!`);
           this.close('product-modal');
+          
+          // Limpar produto externo do estado
+          State.currentExternalProduct = null;
+          
           await App.loadData();
           await App.searchProduct();
         } catch (error) {
@@ -1834,6 +1855,8 @@
         try {
           const externalProduct = await ExternalAPI.searchOpenFoodFacts(ean);
           if (externalProduct) {
+            // Salvar o produto externo no estado para usar no modal
+            State.currentExternalProduct = externalProduct;
             UI.renderProductCard({ ...externalProduct, ean }, false);
             return;
           }
@@ -1885,4 +1908,4 @@
     });
   </script>
 </body>
-</html>
+  </html>
